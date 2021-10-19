@@ -39,9 +39,12 @@ float MainWindow::faceArea(MyMesh* _mesh, int faceID)
     return aire;
 }
 
-void MainWindow::computeLaplaceCot(MyMesh *_mesh)
+std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
 {
-    float area = 0.;
+    float lambda = 50., h = 100., area = 0.;
+    std::vector<QVector3D> matrixOp;
+    std::vector<int> idx;
+
     // parcours des sommets
     for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
     {
@@ -63,10 +66,9 @@ void MainWindow::computeLaplaceCot(MyMesh *_mesh)
         std::vector<float> result(3);
         for (MyMesh::VertexOHalfedgeCWIter vheh_cwit = _mesh->voh_cwiter(*curVert); vheh_cwit.is_valid(); vheh_cwit ++)
         {
-             HalfedgeHandle heh1 = _mesh->next_halfedge_handle(*vheh_cwit);
-             HalfedgeHandle heh2 = _mesh->prev_halfedge_handle(*vheh_cwit);
-
-             qDebug() << "heh1, heh2" << heh1.idx() << heh2.idx(); // HEH OKAY?????
+             HalfedgeHandle oheh = _mesh->opposite_halfedge_handle(*vheh_cwit);
+             HalfedgeHandle heh1 = _mesh->next_halfedge_handle(oheh);
+             HalfedgeHandle heh2 = _mesh->next_halfedge_handle(*vheh_cwit);
 
              auto point_i = _mesh->point( _mesh->to_vertex_handle(*vheh_cwit));
              auto next_point_i = _mesh->point( _mesh->to_vertex_handle(heh1));
@@ -77,14 +79,13 @@ void MainWindow::computeLaplaceCot(MyMesh *_mesh)
              QVector3D pvi = QVector3D(prev_point_i[0], prev_point_i[1], prev_point_i[2]);
 
              qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
-             //pvi pas OK: tjrs le meme pour le meme vi???
 
              QVector3D vnvi = nvi-v;
              QVector3D vpvi = pvi-v;
              QVector3D nvivi = vi - nvi;
              QVector3D pvivi = vi - pvi;
 
-             float alpha = 0, beta = 0.;
+             float alpha = 0., beta = 0.;
              if (QVector3D::dotProduct(vnvi, nvivi) != 0)
                  alpha = acos(QVector3D::dotProduct(vnvi, nvivi)/vnvi.length()*nvivi.length());
              if (QVector3D::dotProduct(vpvi, pvivi) != 0)
@@ -99,14 +100,60 @@ void MainWindow::computeLaplaceCot(MyMesh *_mesh)
 
         }
 
+        //calcul du laplacien
         std::vector<float> laplaceOp(3);
-        laplaceOp[0] = 1/(2*barycentricArea)*result[0];
-        laplaceOp[1] = 1/(2*barycentricArea)*result[1];
-        laplaceOp[2] = 1/(2*barycentricArea)*result[2];
+        laplaceOp[0] = (1/(2*barycentricArea))*result[0];
+        laplaceOp[1] = (1/(2*barycentricArea))*result[1];
+        laplaceOp[2] = (1/(2*barycentricArea))*result[2];
+
+        /*qDebug() << "point" << point[0] << point[1] << point[2] ;
+
+        point[0] += (float) h*lambda*laplaceOp[0];
+        point[1] += (float) h*lambda*laplaceOp[1];
+        point[2] += (float) h*lambda*laplaceOp[2];
+
+        //qDebug() << point[0] << h*lambda*laplaceOp[0];
+
+        //_mesh->set_point(*curVert, point);
+
+        auto point_ = _mesh->point(*curVert);
 
         qDebug() << "laplace" << laplaceOp;
+        //qDebug() << "point" << point[0] << point[1] << point[2] ;
+        qDebug() << "point" << point_[0] << point_[1] << point_[2] ;*/
+
+        matrixOp.push_back(QVector3D(laplaceOp[0], laplaceOp[1], laplaceOp[2]));
+        idx.push_back(curVert->idx());
+    }
+
+    //déplacer les points; si fait dans la boucle précédente, accès au point d'après pose pb
+    for (int i = 0; i < (int) idx.size(); i++)
+    {
+        auto point = _mesh->point(_mesh->vertex_handle((idx[i])));
+        point[0] += (float) h*lambda*matrixOp[i][0];
+        point[1] += (float) h*lambda*matrixOp[i][1];
+        point[2] += (float) h*lambda*matrixOp[i][2];
+
+        _mesh->set_point(_mesh->vertex_handle((idx[i])), point);
+    }
+
+    displayMesh(_mesh);
+    return matrixOp;
+}
+
+//inutile....
+void MainWindow::computeSmoothing(MyMesh *_mesh)
+{
+    std::vector<QVector3D> matrixOp = computeLaplaceCot(_mesh);
+
+    // parcours des sommets
+    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
+    {
+        auto point = _mesh->point(*curVert);
+        //point[0] = matrixOp[]
 
     }
+
 }
 
 /* **** début de la partie boutons et IHM **** */
@@ -136,7 +183,7 @@ void MainWindow::on_pushButton_courbures_clicked()
     OpenMesh::IO::read_mesh(mesh, fileName.toUtf8().constData());*/
 
     mesh.update_normals();
-    mesh.request_vertex_colors() ;
+    //mesh.request_vertex_colors() ;
 
     computeLaplaceCot(&mesh);
 
@@ -146,7 +193,7 @@ void MainWindow::on_pushButton_courbures_clicked()
     courb.set_fixed_colors();*/
 
     //computeSurface(&mesh);
-    displayMesh(&mesh,DisplayMode::VertexColorShading);
+    displayMesh(&mesh/*,DisplayMode::VertexColorShading*/);
 }
 
 /* **** fin de la partie boutons et IHM **** */

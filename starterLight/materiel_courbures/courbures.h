@@ -5,10 +5,10 @@
 #include <OpenMesh/Core/Mesh/TriMesh_ArrayKernelT.hh>
 #include <OpenMesh/Core/Mesh/ArrayKernel.hh>
 #include <OpenMesh/Core/Geometry/Vector11T.hh>
-#include <Eigen/Core>
-#include <Eigen/Geometry>
+//#include <Eigen/Core>
+//#include <Eigen/Geometry>
 #include "mainwindow.h"
-
+/*
 class MyQuad
 {
     double _coefs[5] ; // a_0 x^2 + a1 xy + a2 y^2 + a3 x + a4 y + a5
@@ -165,6 +165,6 @@ public:
     MyQuad fit_quad(MyMesh::VertexHandle vh) ;
     void compute_KH() ;
     void set_K_colors() ;
-};
+};*/
 
 #endif // COURBURES_H

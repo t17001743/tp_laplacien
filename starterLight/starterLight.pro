@@ -44,12 +44,10 @@ SOURCES += \
         main.cpp \
         mainwindow.cpp \
     meshviewerwidget.cpp \
-    materiel_courbures/courbures.cpp
 
 HEADERS += \
         mainwindow.h \
     meshviewerwidget.h \
-    materiel_courbures/courbures.h
 
 FORMS += \
         mainwindow.ui
