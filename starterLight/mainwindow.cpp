@@ -41,7 +41,7 @@ float MainWindow::faceArea(MyMesh* _mesh, int faceID)
 
 std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
 {
-    float lambda = 50., h = 100., area = 0.;
+    float lambda = 0.15, h = 0.05, area = 0.;
     std::vector<QVector3D> matrixOp;
     std::vector<int> idx;
 
@@ -87,13 +87,16 @@ std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
 
              float alpha = 0., beta = 0.;
              if (QVector3D::dotProduct(vnvi, nvivi) != 0)
-                 alpha = acos(QVector3D::dotProduct(vnvi, nvivi)/vnvi.length()*nvivi.length());
+                 alpha = acos(QVector3D::dotProduct(vnvi, nvivi)/(vnvi.length()*nvivi.length()));
              if (QVector3D::dotProduct(vpvi, pvivi) != 0)
-                 beta = acos(QVector3D::dotProduct(vpvi, pvivi)/vpvi.length()*pvivi.length());
+                 beta = acos(QVector3D::dotProduct(vpvi, pvivi)/(vpvi.length()*pvivi.length()));
+
+             //qDebug() << "angle computation" << QVector3D::dotProduct(vpvi, pvivi) << QVector3D::dotProduct(vnvi, nvivi)
+                      //<< vnvi.length() << nvivi.length();
 
              qDebug() << "alpha, beta" << alpha << beta;
 
-             cot += (1/tan(alpha)*(1/tan(beta)));
+             cot = ((1/tan(alpha))+(1/tan(beta)));
              result[0] += cot*(point_i[0] - point[0]);
              result[1] += cot*(point_i[1] - point[1]);
              result[2] += cot*(point_i[2] - point[2]);
