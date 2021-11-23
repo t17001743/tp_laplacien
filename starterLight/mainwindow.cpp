@@ -39,9 +39,9 @@ float MainWindow::faceArea(MyMesh* _mesh, int faceID)
     return aire;
 }
 
-std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
+std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
 {
-    float lambda = 0.15, h = 0.05, area = 0.;
+    float lambda = 0., h = 0.;
     std::vector<QVector3D> matrixOp;
     std::vector<int> idx;
 
@@ -51,18 +51,9 @@ std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
         auto point = _mesh->point(*curVert);
         QVector3D v = QVector3D(point[0], point[1], point[2]);
 
-        // calcul de l'aire barycentrique
-        for (MyMesh::VertexFaceIter curFace = _mesh->vf_iter(*curVert); curFace.is_valid(); curFace ++)
-        {
-           //FaceHandle fh = _mesh->face_handle(curFace->idx());
-           area += faceArea(_mesh, curFace->idx());
-        }
-
-        float barycentricArea = (float) 1/3*area; //OK
-
         //calcul de la composante angulaire
-        //chercher le point suivant (next) et précédent pour angles
-        float cot = 0.;
+        //chercher le point suivant (next) et précédent (previous) pour angles
+        float cot = 0., area = 0.;
         std::vector<float> result(3);
         for (MyMesh::VertexOHalfedgeCWIter vheh_cwit = _mesh->voh_cwiter(*curVert); vheh_cwit.is_valid(); vheh_cwit ++)
         {
@@ -70,66 +61,85 @@ std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
              HalfedgeHandle heh1 = _mesh->next_halfedge_handle(oheh);
              HalfedgeHandle heh2 = _mesh->next_halfedge_handle(*vheh_cwit);
 
+             FaceHandle fh = mesh.face_handle(heh1);
+             area += faceArea(&mesh, fh.idx());
+
              auto point_i = _mesh->point( _mesh->to_vertex_handle(*vheh_cwit));
              auto next_point_i = _mesh->point( _mesh->to_vertex_handle(heh1));
              auto prev_point_i = _mesh->point( _mesh->to_vertex_handle(heh2));
 
-             QVector3D vi = QVector3D(point_i[0], point_i[1], point_i[2]);
-             QVector3D nvi = QVector3D(next_point_i[0], next_point_i[1], next_point_i[2]);
-             QVector3D pvi = QVector3D(prev_point_i[0], prev_point_i[1], prev_point_i[2]);
+             if (typeIdx == 0)
+             {
+                 lambda = 0.01, h = 0.01;
+                 QVector3D vi = QVector3D(point_i[0], point_i[1], point_i[2]);
+                 QVector3D nvi = QVector3D(next_point_i[0], next_point_i[1], next_point_i[2]);
+                 QVector3D pvi = QVector3D(prev_point_i[0], prev_point_i[1], prev_point_i[2]);
 
-             qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
+                 qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
 
-             QVector3D vnvi = nvi-v;
-             QVector3D vpvi = pvi-v;
-             QVector3D nvivi = vi - nvi;
-             QVector3D pvivi = vi - pvi;
+                 QVector3D nviv = v-nvi;
+                 QVector3D pviv = v-pvi;
+                 QVector3D nvivi = vi - nvi;
+                 QVector3D pvivi = vi - pvi;
 
-             float alpha = 0., beta = 0.;
-             if (QVector3D::dotProduct(vnvi, nvivi) != 0)
-                 alpha = acos(QVector3D::dotProduct(vnvi, nvivi)/(vnvi.length()*nvivi.length()));
-             if (QVector3D::dotProduct(vpvi, pvivi) != 0)
-                 beta = acos(QVector3D::dotProduct(vpvi, pvivi)/(vpvi.length()*pvivi.length()));
+                 float alpha = 0., beta = 0.;
+                 if (QVector3D::dotProduct(nviv, nvivi) != 0)
+                     alpha = acos(QVector3D::dotProduct(nviv, nvivi)/(nviv.length()*nvivi.length()));
+                 if (QVector3D::dotProduct(pviv, pvivi) != 0)
+                     beta = acos(QVector3D::dotProduct(pviv, pvivi)/(pviv.length()*pvivi.length()));
 
-             //qDebug() << "angle computation" << QVector3D::dotProduct(vpvi, pvivi) << QVector3D::dotProduct(vnvi, nvivi)
-                      //<< vnvi.length() << nvivi.length();
+                 qDebug() << "alpha, beta" << alpha << beta;
 
-             qDebug() << "alpha, beta" << alpha << beta;
-
-             cot = ((1/tan(alpha))+(1/tan(beta)));
-             result[0] += cot*(point_i[0] - point[0]);
-             result[1] += cot*(point_i[1] - point[1]);
-             result[2] += cot*(point_i[2] - point[2]);
-
+                 cot = ((float)(1/tan(alpha))+(float)(1/tan(beta)));
+                 result[0] += (float) cot*(point_i[0] - point[0]);
+                 result[1] += (float) cot*(point_i[1] - point[1]);
+                 result[2] += (float) cot*(point_i[2] - point[2]);
+             }
+             else if (typeIdx == 1)
+             {
+                 lambda = 0.15, h = 0.5;
+                 result[0] += (point_i[0] - point[0]);
+                 result[1] += (point_i[1] - point[1]);
+                 result[2] += (point_i[2] - point[2]);
+             }
         }
 
-        //calcul du laplacien
         std::vector<float> laplaceOp(3);
-        laplaceOp[0] = (1/(2*barycentricArea))*result[0];
-        laplaceOp[1] = (1/(2*barycentricArea))*result[1];
-        laplaceOp[2] = (1/(2*barycentricArea))*result[2];
+        if (typeIdx == 0)
+        {
+            // calcul de l'aire barycentrique
+            float barycentricArea = (float) 1/3*area; //OK
 
-        /*qDebug() << "point" << point[0] << point[1] << point[2] ;
+            //calcul du laplacien cotangentiel
+            laplaceOp[0] = (1/(2*barycentricArea))*result[0];
+            laplaceOp[1] = (1/(2*barycentricArea))*result[1];
+            laplaceOp[2] = (1/(2*barycentricArea))*result[2];
+        }
 
-        point[0] += (float) h*lambda*laplaceOp[0];
-        point[1] += (float) h*lambda*laplaceOp[1];
-        point[2] += (float) h*lambda*laplaceOp[2];
-
-        //qDebug() << point[0] << h*lambda*laplaceOp[0];
-
-        //_mesh->set_point(*curVert, point);
-
-        auto point_ = _mesh->point(*curVert);
-
-        qDebug() << "laplace" << laplaceOp;
-        //qDebug() << "point" << point[0] << point[1] << point[2] ;
-        qDebug() << "point" << point_[0] << point_[1] << point_[2] ;*/
+        else if (typeIdx == 1)
+        {
+            //calcul du laplacien uniforme
+            laplaceOp[0] = result[0];
+            laplaceOp[1] = result[1];
+            laplaceOp[2] = result[2];
+        }
 
         matrixOp.push_back(QVector3D(laplaceOp[0], laplaceOp[1], laplaceOp[2]));
         idx.push_back(curVert->idx());
+
+
+        QVector<QVector3D> L, D, M;
+        //possible que les for soient sur idx!!!!!!!!!!
+        for (int i = 0; i<(int)matrixOp.size(); i++)
+        {
+            for(int j = 0; j<(int)matrixOp.size(); j++)
+            {
+                if (i==j) D.push_back(matrixOp[i]); // NON!!! area
+            }
+        }
     }
 
-    //déplacer les points; si fait dans la boucle précédente, accès au point d'après pose pb
+    //flou de diffusion
     for (int i = 0; i < (int) idx.size(); i++)
     {
         auto point = _mesh->point(_mesh->vertex_handle((idx[i])));
@@ -142,21 +152,6 @@ std::vector<QVector3D> MainWindow::computeLaplaceCot(MyMesh *_mesh)
 
     displayMesh(_mesh);
     return matrixOp;
-}
-
-//inutile....
-void MainWindow::computeSmoothing(MyMesh *_mesh)
-{
-    std::vector<QVector3D> matrixOp = computeLaplaceCot(_mesh);
-
-    // parcours des sommets
-    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
-    {
-        auto point = _mesh->point(*curVert);
-        //point[0] = matrixOp[]
-
-    }
-
 }
 
 /* **** début de la partie boutons et IHM **** */
@@ -188,12 +183,8 @@ void MainWindow::on_pushButton_courbures_clicked()
     mesh.update_normals();
     //mesh.request_vertex_colors() ;
 
-    computeLaplaceCot(&mesh);
-
-    /*Courbures courb(mesh) ;
-    resetAllColorsAndThickness(&mesh);
-
-    courb.set_fixed_colors();*/
+    int typeIdx = ui->idxComboBox->currentIndex();
+    computeLaplace(&mesh, typeIdx);
 
     //computeSurface(&mesh);
     displayMesh(&mesh/*,DisplayMode::VertexColorShading*/);

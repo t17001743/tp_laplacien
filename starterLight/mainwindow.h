@@ -43,8 +43,7 @@ public:
     ~MainWindow();
 
     float faceArea(MyMesh* _mesh, int faceID);
-    std::vector<QVector3D> computeLaplaceCot(MyMesh *_mesh);
-    void computeSmoothing(MyMesh *_mesh);
+    std::vector<QVector3D> computeLaplace(MyMesh *_mesh, int typeIdx);
 
     // les 4 fonctions à compléter
     void showSelections(MyMesh* _mesh);
