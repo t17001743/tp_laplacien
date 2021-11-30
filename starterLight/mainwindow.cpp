@@ -1,32 +1,31 @@
+/*
+ * MASTER 2 GIG - Modèles Géométriques - 2021-2022
+ * Auteurs : Gabriel PAREL & Samantha THIEL
+ * Merci à A. POLETTE et A. BAC pour la base de code.
+ *
+ */
+
 #include "mainwindow.h"
-#include "materiel_courbures/courbures.h"
 #include "ui_mainwindow.h"
 
-
-void MainWindow::computeSurface(MyMesh *_mesh)
+bool MainWindow::are1Neighbors(const MyMesh::VertexHandle vh1, const MyMesh::VertexHandle vh2)
 {
-    //for all p? one p?
-    //calculer voisinage
-    //on se place sur P + VOISINS
-    //calculer repere local => acp
-    //translater Xi dans repere local
-    //calculer A, B
-    //on compute min de J(X) = ||AX + B||^2 par SVD
-    //on recup X = coefficients de la surface
+    bool areNeighbors = false;
+    //circulateur sur le 1-voisinage
+    for(MyMesh::VertexVertexIter vv_it = mesh.vv_iter(vh1);vv_it.is_valid();++vv_it)
+    {
+        if (*vv_it == vh2) areNeighbors = true;
+    }
+    return areNeighbors;
 }
 
-/**
- * @brief MainWindow::faceArea : aire d'une face du maillage
- * @param _mesh : le maillage ouvert dans la fenêtre
- * @param faceID : face dont on calcule l'aire
- * @return l'aire de la face courante
- */
 float MainWindow::faceArea(MyMesh* _mesh, int faceID)
 {
     float aire = 0.;
     FaceHandle fh = _mesh->face_handle(faceID);  //face courante
 
-    MyMesh::FaceVertexIter fv_it = _mesh->fv_iter(fh);  //iterator sur les sommets de la face courante
+    //iterator sur les sommets de la face courante
+    MyMesh::FaceVertexIter fv_it = _mesh->fv_iter(fh);
 
     //points du triangle courant ABC
     const MyMesh::Point& A = _mesh->point(*fv_it);  ++fv_it;
@@ -41,22 +40,27 @@ float MainWindow::faceArea(MyMesh* _mesh, int faceID)
 
 std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
 {
-    float lambda = 0., h = 0.;
+    float lambda = 0., h = 0.; //pour flou de diffusion
     std::vector<QVector3D> matrixOp;
-    std::vector<int> idx;
+    std::vector<int> idx; //stockage des indices
+    QVector<float> areas; //D
 
     // parcours des sommets
-    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
+    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert !=
+         _mesh->vertices_end(); curVert++)
     {
         auto point = _mesh->point(*curVert);
         QVector3D v = QVector3D(point[0], point[1], point[2]);
 
         //calcul de la composante angulaire
-        //chercher le point suivant (next) et précédent (previous) pour angles
+        //chercher le point suivant (next) et précédent (previous)
+        //pour le calcul d'angles
         float cot = 0., area = 0.;
         std::vector<float> result(3);
-        for (MyMesh::VertexOHalfedgeCWIter vheh_cwit = _mesh->voh_cwiter(*curVert); vheh_cwit.is_valid(); vheh_cwit ++)
+        for (MyMesh::VertexOHalfedgeCWIter vheh_cwit = _mesh->voh_cwiter(*curVert);
+             vheh_cwit.is_valid(); vheh_cwit ++)
         {
+            //on récupère l'arête courante, suivante, précédente
              HalfedgeHandle oheh = _mesh->opposite_halfedge_handle(*vheh_cwit);
              HalfedgeHandle heh1 = _mesh->next_halfedge_handle(oheh);
              HalfedgeHandle heh2 = _mesh->next_halfedge_handle(*vheh_cwit);
@@ -64,19 +68,23 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
              FaceHandle fh = mesh.face_handle(heh1);
              area += faceArea(&mesh, fh.idx());
 
+             //on récupère le point courant, suivant, précédent
              auto point_i = _mesh->point( _mesh->to_vertex_handle(*vheh_cwit));
              auto next_point_i = _mesh->point( _mesh->to_vertex_handle(heh1));
              auto prev_point_i = _mesh->point( _mesh->to_vertex_handle(heh2));
 
+             //si approche cotangentielle, on calcule les angles alpha et beta afin
+             //de déterminer les cotangentes de ceux-ci
              if (typeIdx == 0)
              {
-                 lambda = 0.01, h = 0.01;
+                 lambda = 0.01, h = 0.01; //bons résultats avec ces valeurs
                  QVector3D vi = QVector3D(point_i[0], point_i[1], point_i[2]);
                  QVector3D nvi = QVector3D(next_point_i[0], next_point_i[1], next_point_i[2]);
                  QVector3D pvi = QVector3D(prev_point_i[0], prev_point_i[1], prev_point_i[2]);
 
-                 //qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
+                 //qDebug() << "vi, nvi, pvi" << vi << nvi << pvi; //pour vérification
 
+                 //calcul des vecteurs d'intérêt; attention à l'orientation !
                  QVector3D nviv = v-nvi;
                  QVector3D pviv = v-pvi;
                  QVector3D nvivi = vi - nvi;
@@ -84,20 +92,25 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
 
                  float alpha = 0., beta = 0.;
                  if (QVector3D::dotProduct(nviv, nvivi) != 0)
-                     alpha = acos(QVector3D::dotProduct(nviv, nvivi)/(nviv.length()*nvivi.length()));
+                     alpha = acos(QVector3D::dotProduct(nviv, nvivi)/
+                                  (nviv.length()*nvivi.length()));
                  if (QVector3D::dotProduct(pviv, pvivi) != 0)
-                     beta = acos(QVector3D::dotProduct(pviv, pvivi)/(pviv.length()*pvivi.length()));
+                     beta = acos(QVector3D::dotProduct(pviv, pvivi)/
+                                 (pviv.length()*pvivi.length()));
 
-                 qDebug() << "alpha, beta" << alpha << beta;
+                 //qDebug() << "alpha, beta" << alpha << beta; //pour vérification
 
                  cot = ((float)(1/tan(alpha))+(float)(1/tan(beta)));
+
+                 //result correspond à la composante cotangentielle du calcul
                  result[0] += (float) cot*(point_i[0] - point[0]);
                  result[1] += (float) cot*(point_i[1] - point[1]);
                  result[2] += (float) cot*(point_i[2] - point[2]);
              }
+             //si approche uniforme, on ne calcule pas d'angles
              else if (typeIdx == 1)
              {
-                 lambda = 0.15, h = 0.5;
+                 lambda = 0.15, h = 0.5; //bons résultats avec ces valeurs
                  result[0] += (point_i[0] - point[0]);
                  result[1] += (point_i[1] - point[1]);
                  result[2] += (point_i[2] - point[2]);
@@ -105,10 +118,12 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
         }
 
         std::vector<float> laplaceOp(3);
-        if (typeIdx == 0)
+        //si approche cotangentielle, on calcule l'aire barycentrique
+        if (typeIdx == 0 || typeIdx == 2)
         {
             // calcul de l'aire barycentrique
-            float barycentricArea = (float) 1/3*area; //OK
+            float barycentricArea = (float) 1/3*area;
+            areas.push_back(1/(2*barycentricArea));
 
             //calcul du laplacien cotangentiel
             laplaceOp[0] = (1/(2*barycentricArea))*result[0];
@@ -127,19 +142,50 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
         matrixOp.push_back(QVector3D(laplaceOp[0], laplaceOp[1], laplaceOp[2]));
         idx.push_back(curVert->idx());
 
+        /// APPROCHE MATRICIELLE; non terminée
+        /// voir commentaires associés pour plus d'infos
 
-        QVector<QVector3D> L, D, M;
-        //possible que les for soient sur idx!!!!!!!!!!
-        for (int i = 0; i<(int)matrixOp.size(); i++)
+        /*//si approche matricielle, on calcule les matrices M et D
+        if (typeIdx == 2)
         {
-            for(int j = 0; j<(int)matrixOp.size(); j++)
+            QVector<QVector<float>> L, D, M;
+            for (int i = 0; i<(int)matrixOp.size(); i++)
             {
-                if (i==j) D.push_back(matrixOp[i]); // NON!!! area
+                auto vhI = _mesh->vertex_handle((idx[i])); //vi
+                QVector<float> rowL, rowD;
+                for(int j = 0; j<(int)matrixOp.size(); j++)
+                {
+                    auto vhJ = _mesh->vertex_handle((idx[j])); //vj
+                    if (i==j) //diagonale
+                    {
+                        //rowL.push_back(); //-somme des wi,k
+                        rowD.push_back(areas[idx[i]]); //1/2*A(vi)
+                    }
+                    else
+                    {
+                        //si vj est dans le 1-voisinage de vi
+                        if(are1Neighbors(vhI, vhJ))
+                        {
+                            //rowL.push_back(); //wi,j
+                            break;
+                        }
+                        rowL.push_back(0);
+                        rowD.push_back(0);
+                    }
+                }
+                L.push_back(rowL);
+                D.push_back(rowD);
             }
-        }
+
+            //L = DM
+            //besoin de multiplier les matrices entre elles...
+            //la structure de données QVector<QVector> n'est pas très adéquate
+            //il faudrait utiliser la bibliothèque Eigen ou OpenCV
+        } */
     }
 
-    //flou de diffusion
+    //flou de diffusion; on applique directement à chaque point du
+    //maillage courant l'opérateur de Laplace
     for (int i = 0; i < (int) idx.size(); i++)
     {
         auto point = _mesh->point(_mesh->vertex_handle((idx[i])));
@@ -150,7 +196,7 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
         _mesh->set_point(_mesh->vertex_handle((idx[i])), point);
     }
 
-    displayMesh(_mesh);
+    displayMesh(_mesh); //affichage du nouveau maillage
     return matrixOp;
 }
 
@@ -160,7 +206,8 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
 void MainWindow::on_pushButton_chargement_clicked()
 {
     // fenêtre de sélection des fichiers
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Mesh"), "", tr("Mesh Files (*.obj)"));
+    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Mesh"), "",
+                                                    tr("Mesh Files (*.obj)"));
 
     // chargement du fichier .obj dans la variable globale "mesh"
     OpenMesh::IO::read_mesh(mesh, fileName.toUtf8().constData());
@@ -174,19 +221,12 @@ void MainWindow::on_pushButton_chargement_clicked()
 
 void MainWindow::on_pushButton_courbures_clicked()
 {
-    /*// fenêtre de sélection des fichiers
-    QString fileName = QFileDialog::getOpenFileName(this, tr("Open Mesh"), "", tr("Mesh Files (*.obj)"));
-
-    // chargement du fichier .obj dans la variable globale "mesh"
-    OpenMesh::IO::read_mesh(mesh, fileName.toUtf8().constData());*/
-
     mesh.update_normals();
     //mesh.request_vertex_colors() ;
 
     int typeIdx = ui->idxComboBox->currentIndex();
     computeLaplace(&mesh, typeIdx);
 
-    //computeSurface(&mesh);
     displayMesh(&mesh/*,DisplayMode::VertexColorShading*/);
 }
 
@@ -199,18 +239,21 @@ void MainWindow::on_pushButton_courbures_clicked()
 // permet d'initialiser les couleurs et les épaisseurs des élements du maillage
 void MainWindow::resetAllColorsAndThickness(MyMesh* _mesh)
 {
-    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
+    for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert !=
+         _mesh->vertices_end(); curVert++)
     {
         _mesh->data(*curVert).thickness = 1;
         _mesh->set_color(*curVert, MyMesh::Color(0, 0, 0));
     }
 
-    for (MyMesh::FaceIter curFace = _mesh->faces_begin(); curFace != _mesh->faces_end(); curFace++)
+    for (MyMesh::FaceIter curFace = _mesh->faces_begin(); curFace !=
+         _mesh->faces_end(); curFace++)
     {
         _mesh->set_color(*curFace, MyMesh::Color(150, 150, 150));
     }
 
-    for (MyMesh::EdgeIter curEdge = _mesh->edges_begin(); curEdge != _mesh->edges_end(); curEdge++)
+    for (MyMesh::EdgeIter curEdge = _mesh->edges_begin(); curEdge !=
+         _mesh->edges_end(); curEdge++)
     {
         _mesh->data(*curEdge).thickness = 1;
         _mesh->set_color(*curEdge, MyMesh::Color(0, 0, 0));
@@ -229,7 +272,8 @@ void MainWindow::displayMesh(MyMesh* _mesh, DisplayMode mode)
     if(mode == DisplayMode::TemperatureMap)
     {
         QVector<float> values;
-        for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert != _mesh->vertices_end(); curVert++)
+        for (MyMesh::VertexIter curVert = _mesh->vertices_begin(); curVert !=
+             _mesh->vertices_end(); curVert++)
             values.append(fabs(_mesh->data(*curVert).value));
         qSort(values);
 
@@ -450,8 +494,6 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
     vertexSelection = -1;
     edgeSelection = -1;
     faceSelection = -1;
-
-    modevoisinage = false;
 
     ui->setupUi(this);
 }
