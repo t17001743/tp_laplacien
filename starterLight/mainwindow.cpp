@@ -75,7 +75,7 @@ std::vector<QVector3D> MainWindow::computeLaplace(MyMesh *_mesh, int typeIdx)
                  QVector3D nvi = QVector3D(next_point_i[0], next_point_i[1], next_point_i[2]);
                  QVector3D pvi = QVector3D(prev_point_i[0], prev_point_i[1], prev_point_i[2]);
 
-                 qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
+                 //qDebug() << "vi, nvi, pvi" << vi << nvi << pvi;
 
                  QVector3D nviv = v-nvi;
                  QVector3D pviv = v-pvi;
